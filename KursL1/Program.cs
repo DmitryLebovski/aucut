@@ -2,16 +2,54 @@
 using System.Diagnostics;
 using System.IO;
 using System.Reflection.PortableExecutable;
+using System.Security.Cryptography.X509Certificates;
 using NAudio.Midi;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
+using System.Drawing.Imaging;
+using System.Drawing;
 
 namespace классы1
 {
     class Audio_info
     {
-        string title;
-        int duration;
+        private string title;
+        private int duration;
+
+        //свойства
+        public string Title
+        {
+            get
+            {
+                return title;
+            }
+
+            set
+            {
+                title = value;
+                if (value.Length == 0)
+                {
+                    title = "Track_Placeholder";
+                }
+            }
+        }
+
+        public int Duration
+        {
+            get
+            {
+                return duration;
+            }
+
+            set
+            {
+                duration = value;
+                if (value < 0)
+                {
+                    duration = 0;
+                }
+            }
+        }
 
         //конструкторы
         public Audio_info(string a, int b)
@@ -45,15 +83,15 @@ namespace классы1
             int min = sec / 60;
             if (sec > 60)
             {
-                Console.WriteLine($"Title: {title}, Duration: {string.Format("{0:00}", min)}:{string.Format("{0:00}", sec - min * 60)}");
+                Console.WriteLine($"Название: {title}, Длина: {string.Format("{0:00}", min)}:{string.Format("{0:00}", sec - min * 60)}");
             }
             else if (sec > 0)
             {
-                Console.WriteLine($"Title: {title}, Duration: {string.Format("{0:00}", min)}:{string.Format("{0:00}", duration)}");
+                Console.WriteLine($"Название: {title}, Длина: {string.Format("{0:00}", min)}:{string.Format("{0:00}", duration)}");
             }
             else
             {
-                Console.WriteLine($"Title: {title}, Duration: {string.Format("{0:00}", min)}:{string.Format("{0:00}", 0)}");
+                Console.WriteLine($"Название: {title}, Длина: {string.Format("{0:00}", min)}:{string.Format("{0:00}", 0)}");
             }
         }
 
@@ -72,7 +110,7 @@ namespace классы1
                         break;
 
                     case "2":
-
+                        //cutTT(inp, outp, TimeSpan.FromSeconds(a), TimeSpan.FromSeconds(b));
                         TrimMp3(inp, outp, TimeSpan.FromSeconds(a), TimeSpan.FromSeconds(b + 0.1), "2");
                         new_duration = b - a;
                         duration = new_duration;
@@ -86,9 +124,9 @@ namespace классы1
                         */
                 }
 
-                Console.WriteLine("Want to listen cutted part?");
-                Console.WriteLine("1. Yes");
-                Console.WriteLine("2. No");
+                Console.WriteLine("Хотите прослушать новую дорожку?");
+                Console.WriteLine("1. Да");
+                Console.WriteLine("2. Нет");
                 var ch2 = Console.ReadLine();
                 if (ch2 == "1")
                 {
@@ -108,33 +146,38 @@ namespace классы1
             if (begin.HasValue && end.HasValue && begin > end)
                 throw new ArgumentOutOfRangeException("end", "end should be greater than begin");
 
-            using (var reader = new Mp3FileReader(inputPath))
-            using (var writer = File.Create(outputPath))
+            switch (ch)
             {
-                Mp3Frame frame;
-                while ((frame = reader.ReadNextFrame()) != null)
-                {
-                    switch (ch)
-                    {
-                        case "1":
-                            if (reader.CurrentTime <= begin || !begin.HasValue)
-                            {
-                                if (reader.CurrentTime >= end || !end.HasValue)
-                                    writer.Write(frame.RawData, 0, frame.RawData.Length);
-                                else break;
-                            }
-                            break;
+                case "1":
 
-                        case "2":
+                    using (AudioFileReader readerWV = new AudioFileReader(inputPath))
+                    {
+                        TimeSpan startPosition = (TimeSpan)begin;
+                        TimeSpan endPosition = (TimeSpan)end;
+                        IWaveProvider wave = CutAudio(readerWV, startPosition, endPosition);
+
+                        WaveFileWriter.CreateWaveFile(outputPath, wave);
+                    }
+
+                    break;
+
+                case "2":
+
+                    using (var reader = new Mp3FileReader(inputPath))
+                    using (var writer = File.Create(outputPath))
+                    {
+                        Mp3Frame frame;
+                        while ((frame = reader.ReadNextFrame()) != null)
+                        {
                             if (reader.CurrentTime >= begin || !begin.HasValue)
                             {
                                 if (reader.CurrentTime <= end || !end.HasValue)
                                     writer.Write(frame.RawData, 0, frame.RawData.Length);
                                 else break;
                             }
-                            break;
+                        }
                     }
-                }
+                    break;
             }
 
 
@@ -156,10 +199,9 @@ namespace классы1
             */
         }
 
-
-        /*public static IWaveProvider CutAudio(WaveStream wave,
-                                     TimeSpan startPosition,
-                                     TimeSpan endPosition)
+        public static IWaveProvider CutAudio(WaveStream wave,
+                                   TimeSpan startPosition,
+                                   TimeSpan endPosition)
         {
 
             ISampleProvider sourceProvider = wave.ToSampleProvider();
@@ -175,13 +217,13 @@ namespace классы1
             OffsetSampleProvider offset2 = new OffsetSampleProvider(sourceProvider)
             {
                 SkipOver = (endPosition - startPosition),
-                Take = TimeSpan.Zero
             };
 
             wave.Position = currentPosition; // Restore stream position
             return (offset1.FollowedBy(offset2)).ToWaveProvider();
 
-        } */
+        }
+
 
         public void playS(string a, string c)
         {
@@ -200,8 +242,76 @@ namespace классы1
         {
             var readerF = new AudioFileReader(outp);
             var fileName = Path.GetFileName(outp);
-            Audio_info trackNew = new Audio_info(fileName, readerF.TotalTime.Minutes * 60 + readerF.TotalTime.Seconds);
+            Audio_info trackNew = new Audio_info();
+            trackNew.Title = fileName;
+            trackNew.Duration = readerF.TotalTime.Minutes * 60 + readerF.TotalTime.Seconds;
+
             trackNew.info_track();
+
+            //Audio_info trackNew = new Audio_info(fileName, readerF.TotalTime.Minutes * 60 + readerF.TotalTime.Seconds);
+            //trackNew.info_track();
+        }
+    }
+
+    class ChangeTrackPath: Audio_info
+    {
+        private string newPath;
+
+        public string NewPath {
+            get
+            {
+                return newPath;
+            }
+
+            set
+            {
+                newPath = value;
+                if (value.Length < 0) {
+                    newPath = "Track_Placeholder";
+                }
+            }
+        }
+
+        public ChangeTrackPath(string inpP, int d, string newP) : base(inpP, d)
+        {
+            NewPath = newP;
+        }
+
+        public void show_new_path()
+        {
+            Console.WriteLine($"Новый путь (ChangeTrackPath): {NewPath}");
+        }
+    }
+
+    class CreateAudioWave : Audio_info
+    {
+        private string newPath;
+
+        public string NewPath
+        {
+            get
+            {
+                return newPath;
+            }
+
+            set
+            {
+                newPath = value;
+                if (value.Length < 0)
+                {
+                    newPath = "Track_Placeholder";
+                }
+            }
+        }
+
+        public CreateAudioWave(string inpP, int d, string newP) : base(inpP, d)
+        {
+            NewPath = newP;
+        }
+
+        public void show_new_path()
+        {
+            Console.WriteLine($"Новый путь (ChangeTrackPath): {NewPath}");
         }
     }
 
@@ -212,17 +322,25 @@ namespace классы1
             string sourceFile = "C:\\Users\\klausreinherz\\Downloads\\test.mp3";
             var reader = new AudioFileReader(sourceFile);
             var fileName = Path.GetFileName(sourceFile);
+            //Audio_info track1 = new Audio_info(fileName, reader.TotalTime.Minutes * 60 + reader.TotalTime.Seconds);
 
-            Audio_info track1 = new Audio_info(fileName, reader.TotalTime.Minutes * 60 + reader.TotalTime.Seconds);
+            Audio_info track1 = new Audio_info();
+            track1.Title = fileName;
+            track1.Duration = reader.TotalTime.Minutes * 60 + reader.TotalTime.Seconds;
+            
             track1.info_track();
+            Console.WriteLine($"Старый путь(вызов writeline): {sourceFile}");
+
+            ChangeTrackPath track1NP = new ChangeTrackPath(track1.Title, track1.Duration, "C:\\Users\\klausreinherz\\Downloads\\NEWPATH.mp3");
+            track1NP.show_new_path();
 
             var waveOut = new WaveOutEvent();
             waveOut.Init(reader);
 
-            Console.WriteLine("1. Play track");
-            Console.WriteLine("2. Pause track");
-            Console.WriteLine("1.1. Cut track");
-            Console.WriteLine("0. Finish cut");
+            Console.WriteLine("1. Прослушать трек");
+            Console.WriteLine("2. Приостановить трек");
+            Console.WriteLine("1.1. Редактировать трек");
+            Console.WriteLine("0. Закончить работу");
             
             var a = "";
             a = Console.ReadLine();
@@ -235,17 +353,18 @@ namespace классы1
                         waveOut.Play();
                         break;
                     case "1.1":
-                        Console.WriteLine("1. Cut a part of the original track");
-                        Console.WriteLine("2. Cut a part as new track");
+                        Console.WriteLine("1. Вырезать(удалить) промежуток из исходной дорожки");
+                        Console.WriteLine("2. Вырезать промежуток как новую дорожку");
                         var ch = Console.ReadLine();
-                        Console.WriteLine("Start?");
+                        Console.WriteLine("Задайте промежуток в секундах:");
+                        Console.WriteLine("Начало:");
                         var s = Convert.ToInt32(Console.ReadLine());
-                        Console.WriteLine("End?");
+                        Console.WriteLine("Конец: ");
                         var e = Convert.ToInt32(Console.ReadLine());
-                        Console.WriteLine("Track name");
+                        Console.WriteLine("Введите название новой дорожки:");
                         var n = Console.ReadLine();
                         string outputFile = $"C:\\Users\\klausreinherz\\Downloads\\{n}.mp3";
-                        Console.WriteLine($"New duration: {track1.cut_track(sourceFile, outputFile, s, e, ch)} sec.");
+                        Console.WriteLine($"Новая длина: {track1.cut_track(sourceFile, outputFile, s, e, ch)} сек.");
                         break;
                     case "2":
                         waveOut.Pause();
@@ -257,11 +376,41 @@ namespace классы1
                 a = Console.ReadLine();
             }
 
-            Console.WriteLine("Finish project");
+            Console.WriteLine("Конец работы.");
             Console.ReadKey();
         }
     }
-}
+} 
+
+/*void cutTT(string inputPath, string outputPath, TimeSpan begin, TimeSpan end)
+       {
+           using (var input = new Mp3FileReader(inputPath))
+           {
+               // Create an output file with the same format as the input file
+               //(var output = new Mp3FileWriter("output.mp3", input.WaveFormat)
+               using (var output = File.Create(outputPath))
+               {
+                   // Set the input file's position to the start time
+                   input.CurrentTime = begin;
+
+                   // Read and write audio data from the input file to the output file
+                   while (input.CurrentTime < end)
+                   {
+                       var buffer = new byte[input.WaveFormat.AverageBytesPerSecond
+                           * (end - input.CurrentTime).Seconds];
+                       var bytesRead = input.Read(buffer, 0, buffer.Length);
+
+                       if (bytesRead == 0)
+                       {
+                           break;
+                       }
+
+                       output.Write(buffer, 0, bytesRead);
+                   }
+               }
+           }
+       } */
+
 
 //2 глава должна быть готова к 12(20) апреля (печатать), список литературы тоже дожен быть
 //курсовая работа должна быть готова к 18 мая
